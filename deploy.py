@@ -1,0 +1,95 @@
+#!/usr/bin/env -S uv run --script
+#
+# /// script
+# requires-python = ">=3.12,<3.14"
+# dependencies = ["chalkcompute==2.13.5"]
+# ///
+"""Deploy the Juniper support assistant, its traffic log and the webhook receiver as a ScalingGroup.
+
+    export AUTO_EVALS_TOKEN=$(openssl rand -hex 24)   # shared with evaluator.py
+    ./deploy.py [--env-id <environment>] [--name auto-evals]
+
+Requirements on the target environment:
+  - the Chalk router is enabled, and a secret holds a router API key (CHALK_ROUTER_API_KEY)
+Credentials for the deploy come from `chalk config` in the current directory (or CHALK_* vars).
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import time
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+APP_FILES = ["agent.py", "traffic.py", "server.py", "index.html"]
+
+
+def load_chalk_env(env_id: str | None) -> None:
+    if "CHALK_CLIENT_ID" not in os.environ:
+        cfg = json.loads(subprocess.check_output(["chalk", "config", "--json"]))
+        os.environ["CHALK_API_SERVER"] = cfg["apiServer"]["value"]
+        os.environ["CHALK_CLIENT_ID"] = cfg["clientId"]["value"]
+        os.environ["CHALK_CLIENT_SECRET"] = cfg["clientSecret"]["value"]
+        os.environ.setdefault("CHALK_ENVIRONMENT_ID", cfg["environment"]["value"])
+    if env_id:
+        os.environ["CHALK_ENVIRONMENT_ID"] = env_id
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--name", default="auto-evals")
+    parser.add_argument("--env-id", default=None)
+    parser.add_argument("--model", default="anthropic/claude-haiku-5-5")
+    parser.add_argument("--key-secret", default="CHALK_ROUTER_API_KEY")
+    parser.add_argument("--ready-timeout", type=float, default=900.0)
+    args = parser.parse_args()
+    if not os.environ.get("AUTO_EVALS_TOKEN"):
+        raise SystemExit(
+            "set AUTO_EVALS_TOKEN (e.g. openssl rand -hex 24); evaluator.py needs the same value"
+        )
+
+    load_chalk_env(args.env_id)
+    from chalkcompute import Image, ReadinessProbe, ScalingGroup, Secret
+
+    image = Image.debian_slim(python_version="3.12").pip_install(
+        ["anthropic==1.13.0", "fastapi==0.116.1", "uvicorn[standard]==0.35.0"]
+    )
+    for name in APP_FILES:
+        image = image.add_local_file(
+            str(HERE / name), f"/app/{name}", strategy="volume"
+        )
+    image = image.workdir("/app")
+
+    sg = ScalingGroup(
+        image=image,
+        name=args.name,
+        cpu="1",
+        memory="2Gi",
+        env={
+            "CHALK_API_SERVER": os.environ["CHALK_API_SERVER"],
+            "CHALK_ENVIRONMENT_ID": os.environ["CHALK_ENVIRONMENT_ID"],
+            "AGENT_MODEL": args.model,
+            "PORT": "8080",
+            "ROUTER_API_KEY": Secret.from_chalk_env(args.key_secret),
+            "AUTO_EVALS_TOKEN": Secret.from_local_env("AUTO_EVALS_TOKEN"),
+        },
+        entrypoint=["python", "/app/server.py"],
+        port=8080,
+        readiness_probe=ReadinessProbe.http("/healthz"),
+        # The traffic log, run history and received webhooks live in this replica's memory.
+        min_replicas=1,
+        max_replicas=1,
+    )
+    t0 = time.monotonic()
+    try:
+        sg.deploy(build_timeout=1200.0, ready_timeout=args.ready_timeout)
+    finally:
+        print(f"deploy returned after {time.monotonic() - t0:.0f}s")
+    print("web_url:", sg.web_url)
+
+
+if __name__ == "__main__":
+    main()

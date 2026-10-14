@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Juniper Auto Evals</title>
+<style>
+  /* Chalk marketing palette: green-1 ground, chartreuse primary, mint accents. */
+  :root { --bg:#224A41; --panel:#1C3B34; --line:#32645B; --ink:#EFF5F3; --muted:#B9CFC7;
+          --accent:#BBD96D; --mint:#70CD96; --bad:#F8947F; --warn:#F3F662; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  .mono { font-family:ui-monospace,"SFMono-Regular",Menlo,monospace; }
+  .wrap { padding:20px; display:flex; flex-direction:column; gap:14px; }
+  html.embed .wrap { padding:16px; }
+  h1 { font-size:20px; font-weight:500; margin:0; }
+  html.embed h1 { display:none; }
+  .bar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between;
+         background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:10px 12px; }
+  .bar .group { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .label { font:11px/14px ui-monospace,Menlo,monospace; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
+  .pill { font:12px/16px ui-monospace,Menlo,monospace; padding:3px 9px; border-radius:20px; border:1px solid var(--line); }
+  .pill.v1 { color:var(--mint); border-color:var(--mint); }
+  .pill.v2 { color:var(--bad); border-color:var(--bad); }
+  button { font:12px/14px ui-monospace,Menlo,monospace; text-transform:uppercase; letter-spacing:.06em;
+           border:1px solid var(--accent); border-radius:20px; padding:8px 14px; cursor:pointer;
+           background:var(--accent); color:var(--bg); }
+  button.ghost { background:transparent; color:var(--accent); }
+  button.danger { background:transparent; color:var(--bad); border-color:var(--bad); }
+  button:disabled { opacity:.45; cursor:default; }
+  .grid { display:grid; grid-template-columns:1.15fr 1fr 1fr; gap:12px; }
+  @media (max-width: 900px) { .grid { grid-template-columns:1fr; } }
+  .col { background:var(--panel); border:1px solid var(--line); border-radius:4px; display:flex; flex-direction:column; min-height:0; }
+  .col header { padding:10px 12px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .list { overflow-y:auto; max-height:470px; padding:6px 0; }
+  .item { padding:9px 12px; border-bottom:1px solid rgba(50,100,91,.6); }
+  .item:last-child { border-bottom:0; }
+  .q { color:var(--ink); }
+  .a { color:var(--muted); margin-top:3px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+  .tags { display:flex; gap:6px; flex-wrap:wrap; margin-top:5px; }
+  .tag { font:10.5px/14px ui-monospace,Menlo,monospace; padding:1px 6px; border-radius:3px; background:rgba(185,207,199,.12); color:var(--muted); }
+  .tag.good { background:rgba(112,205,150,.18); color:var(--mint); }
+  .tag.bad { background:rgba(248,148,127,.18); color:var(--bad); }
+  .tag.v2 { color:var(--bad); }
+  form { display:flex; gap:8px; padding:10px 12px; border-top:1px solid var(--line); }
+  input { flex:1; min-width:0; background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:4px; padding:8px 10px; font:inherit; }
+  .metric { margin-top:6px; }
+  .metric .row { display:flex; justify-content:space-between; font:11.5px/16px ui-monospace,Menlo,monospace; color:var(--muted); }
+  .meter { position:relative; height:6px; background:rgba(185,207,199,.15); border-radius:3px; margin-top:3px; }
+  .meter > i { position:absolute; left:0; top:0; bottom:0; border-radius:3px; background:var(--mint); }
+  .meter > i.bad { background:var(--bad); }
+  .meter > b { position:absolute; top:-3px; bottom:-3px; width:2px; background:var(--warn); }
+  .status { font:11px/14px ui-monospace,Menlo,monospace; text-transform:uppercase; letter-spacing:.05em; }
+  .status.running, .status.uploading, .status.claiming { color:var(--warn); }
+  .status.succeeded { color:var(--mint); }
+  .status.failed, .status.timed_out { color:var(--bad); }
+  .hook .event { font:12px/16px ui-monospace,Menlo,monospace; }
+  .hook .event.crossed { color:var(--bad); }
+  .hook .event.recovered { color:var(--mint); }
+  pre { margin:6px 0 0; padding:8px; background:var(--bg); border-radius:3px; font:11px/15px ui-monospace,Menlo,monospace;
+        color:var(--muted); max-height:180px; overflow:auto; white-space:pre-wrap; word-break:break-word; }
+  .empty { color:var(--muted); padding:16px 12px; }
+  .err { color:var(--bad); font-size:12px; padding:0 12px 8px; min-height:0; }
+</style>
+<script>
+  if (new URLSearchParams(location.search).has("embed")) document.documentElement.classList.add("embed");
+</script>
+</head>
+<body>
+<div class="wrap">
+  <h1>Juniper auto evals</h1>
+  <div class="bar">
+    <div class="group">
+      <span class="label">Prompt in production</span>
+      <span id="version" class="pill v1 mono">v1 · reviewed</span>
+      <span id="revert" class="label"></span>
+    </div>
+    <div class="group">
+      <button id="ship" class="danger" type="button">Ship v2 prompt</button>
+      <button id="rollback" class="ghost" type="button">Roll back to v1</button>
+    </div>
+    <div class="group">
+      <span class="label">Next scheduled eval</span>
+      <span id="next" class="mono">--:--</span>
+      <span class="label" id="unscored"></span>
+    </div>
+  </div>
+  <div class="grid">
+    <section class="col">
+      <header><span class="label">Production traffic</span><span class="label" id="traffic-count"></span></header>
+      <div class="list" id="turns"><div class="empty">Waiting for traffic…</div></div>
+      <div class="err" id="chat-err"></div>
+      <form id="chat"><input id="msg" maxlength="400" placeholder="Ask Juniper something (returns, codes, shipping)…" autocomplete="off"><button type="submit">Send</button></form>
+    </section>
+    <section class="col">
+      <header><span class="label">Evaluation runs</span><span class="label">every 5 min</span></header>
+      <div class="list" id="runs"><div class="empty">The first scheduled run lands within five minutes.</div></div>
+    </section>
+    <section class="col">
+      <header><span class="label">Webhook receiver</span><span class="label mono">POST /hooks/eval-alerts</span></header>
+      <div class="list" id="hooks"><div class="empty">No alerts yet. Ship the v2 prompt to trip a threshold.</div></div>
+    </section>
+  </div>
+</div>
+<script>
+const THRESHOLDS = { judge_score_avg: 0.75, policy_pass_rate: 0.9 };
+const LABELS = { judge_score_avg: "LLM judge · avg score", policy_pass_rate: "Policy check · pass rate" };
+let state = null, skew = 0, scoresByTurn = {};
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const clock = (t) => new Date(t * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+const mmss = (s) => { s = Math.max(0, Math.round(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+
+function meter(metric, value) {
+  if (value == null) return "";
+  const limit = THRESHOLDS[metric], bad = value < limit;
+  return `<div class="metric"><div class="row"><span>${LABELS[metric]}</span><span style="color:${bad ? "var(--bad)" : "var(--mint)"}">${value.toFixed(2)} ${bad ? "&lt;" : "≥"} ${limit}</span></div>
+    <div class="meter"><i class="${bad ? "bad" : ""}" style="width:${Math.round(value * 100)}%"></i><b style="left:${limit * 100}%"></b></div></div>`;
+}
+
+function render() {
+  if (!state) return;
+  const v2 = state.prompt_version === "v2";
+  $("version").className = `pill mono ${state.prompt_version}`;
+  $("version").textContent = v2 ? "v2 · stale handbook" : "v1 · reviewed";
+  $("ship").disabled = v2; $("rollback").disabled = !v2;
+  const now = Date.now() / 1000 - skew;
+  $("revert").textContent = v2 && state.revert_at ? `auto-reverts in ${mmss(state.revert_at - now)}` : "";
+  $("next").textContent = mmss(state.next_run_at - now);
+  $("unscored").textContent = `${state.unscored_turns} turns waiting`;
+
+  scoresByTurn = {};
+  for (const run of state.runs) for (const r of run.results || []) scoresByTurn[r.turn_id] = r;
+  $("traffic-count").textContent = `${state.turns.length} recent`;
+  $("turns").innerHTML = state.turns.length ? state.turns.map((t) => {
+    const s = scoresByTurn[t.id];
+    const tags = [`<span class="tag">${t.source}</span>`, `<span class="tag ${t.prompt_version === "v2" ? "v2" : ""}">${t.prompt_version}</span>`, `<span class="tag">${clock(t.at)}</span>`];
+    if (s) {
+      tags.push(`<span class="tag ${s.judge >= 0.75 ? "good" : "bad"}">judge ${s.judge?.toFixed(1)}</span>`);
+      tags.push(`<span class="tag ${s.policy >= 1 ? "good" : "bad"}">${s.policy >= 1 ? "policy ok" : esc(s.violations?.[0] || "policy fail")}</span>`);
+    } else if (t.run_id) tags.push(`<span class="tag">scoring…</span>`);
+    else tags.push(`<span class="tag">unscored</span>`);
+    return `<div class="item"><div class="q">${esc(t.question)}</div><div class="a">${esc(t.answer)}</div><div class="tags">${tags.join("")}</div></div>`;
+  }).join("") : `<div class="empty">Waiting for traffic…</div>`;
+
+  $("runs").innerHTML = state.runs.length ? state.runs.map((r) => {
+    const m = r.metrics || {};
+    const versions = (r.prompt_versions || []).map((v) => `<span class="tag ${v === "v2" ? "v2" : ""}">${v}</span>`).join("");
+    const fired = (r.deliveries || []).map((d) => `<span class="tag ${d.event.endsWith("crossed") ? "bad" : "good"}">webhook ${d.event.split(".").pop()} · ${d.status}</span>`).join("");
+    return `<div class="item"><div style="display:flex;justify-content:space-between;gap:8px"><span class="mono">${clock(r.started_at)}</span><span class="status ${r.status}">${esc(r.status)}</span></div>
+      <div class="tags"><span class="tag">${r.rows ?? 0} rows</span>${versions}${r.eval_run_id ? `<span class="tag">run ${esc(r.eval_run_id.slice(0, 8))}</span>` : ""}</div>
+      ${meter("judge_score_avg", m.judge_score_avg)}${meter("policy_pass_rate", m.policy_pass_rate)}<div class="tags">${fired}</div></div>`;
+  }).join("") : `<div class="empty">The first scheduled run lands within five minutes.</div>`;
+
+  $("hooks").innerHTML = state.webhooks.length ? state.webhooks.map((h) => {
+    const p = h.payload, crossed = p.event === "eval.threshold_crossed";
+    const shown = { ...p, examples: (p.examples || []).map((e) => ({ question: e.question, judge: e.judge, judge_reason: e.judge_reason, violations: e.violations })) };
+    return `<div class="item hook"><div style="display:flex;justify-content:space-between;gap:8px"><span class="event ${crossed ? "crossed" : "recovered"}">${esc(p.event)}</span><span class="mono" style="color:var(--muted)">${clock(h.received_at)}</span></div>
+      <div class="tags"><span class="tag ${crossed ? "bad" : "good"}">${esc(LABELS[p.metric] || p.metric)}: ${p.value} vs ${p.threshold}</span><span class="tag good">HMAC verified</span></div>
+      <pre>${esc(JSON.stringify(shown, null, 2))}</pre></div>`;
+  }).join("") : `<div class="empty">No alerts yet. Ship the v2 prompt to trip a threshold.</div>`;
+}
+
+async function refresh() {
+  try {
+    const res = await fetch("api/state");
+    state = await res.json();
+    skew = Date.now() / 1000 - state.now;
+    render();
+  } catch (e) { /* keep the last state */ }
+}
+
+// Report the demo's main actions to the embedding marketing page (no user content in labels).
+function track(action, label) {
+  if (window.parent !== window) window.parent.postMessage({ type: "chalk-demo-interaction", action, label }, "*");
+}
+
+async function setPrompt(version) {
+  track(version === "v2" ? "ship_prompt" : "rollback_prompt", version);
+  const res = await fetch("api/prompt", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ version }) });
+  if (!res.ok) $("chat-err").textContent = (await res.json()).detail || "Couldn't change the prompt.";
+  refresh();
+}
+$("ship").onclick = () => setPrompt("v2");
+$("rollback").onclick = () => setPrompt("v1");
+$("chat").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const message = $("msg").value.trim();
+  if (!message) return;
+  $("msg").value = ""; $("chat-err").textContent = "Juniper is typing…";
+  track("send_message");
+  const res = await fetch("api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message }) });
+  $("chat-err").textContent = res.ok ? "" : ((await res.json()).detail || "Something went wrong.");
+  refresh();
+};
+// Embedded in a marketing page, report our height so the parent iframe can fit it.
+if (document.documentElement.classList.contains("embed") && window.parent !== window) {
+  // Measure the content, not the document: the document is never shorter than the iframe.
+  const wrap = document.querySelector(".wrap");
+  const postHeight = () => window.parent.postMessage({ type: "chalk-demo-height", height: Math.ceil(wrap.getBoundingClientRect().height) }, "*");
+  new ResizeObserver(postHeight).observe(wrap);
+}
+refresh();
+setInterval(refresh, 3000);
+setInterval(render, 1000);
+</script>
+</body>
+</html>
