@@ -41,8 +41,8 @@ enabled. Create a gateway key with `chalk router api-key create` and save it as 
 
 ```bash
 export AUTO_EVALS_TOKEN=$(openssl rand -hex 24)   # shared by the receiver and the evaluator
-./deploy.py                                       # prints the web_url
-./evaluator.py --demo-url https://<web_url>
+./deploy.py # prints the web_url
+./evaluator.py
 ```
 
 The evaluator runs on a `*/5 * * * *` cron. Open the `web_url`, ask Juniper something, and press
@@ -90,5 +90,5 @@ Apache-2.0.
 
 The SDK reads credentials, API host, and the selected environment from your existing
 `chalk login` in `~/.chalk.yml`, including project-scoped and default logins.
-For unattended runs, `CHALK_CLIENT_ID` and `CHALK_CLIENT_SECRET` remain supported. Where available, `--env-id`
-overrides the target environment; otherwise the SDK uses your login or environment settings.
+For unattended runs, `CHALK_CLIENT_ID` and `CHALK_CLIENT_SECRET` remain supported.
+The examples use the current environment selected by your Chalk login.
