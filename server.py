@@ -116,7 +116,7 @@ def model_config() -> agent.ModelConfig:
     )
     client = anthropic.Anthropic(
         base_url=f"{API_SERVER}/v1/router",
-        default_headers={"X-Chalk-Env-Id": os.environ["CHALK_ENVIRONMENT_ID"]},
+        default_headers={"X-Chalk-Env-Id": os.environ["CHALK_ENVIRONMENT"]},
         timeout=60.0,
         max_retries=2,
         **auth,

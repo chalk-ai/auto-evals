@@ -36,8 +36,7 @@ shoppers ──▶ Juniper (scaling group) ──▶ traffic log
 
 You need [`uv`](https://docs.astral.sh/uv/) and a Chalk environment with the model gateway
 enabled. Create a gateway key with `chalk router api-key create` and save it as the secret
-`CHALK_ROUTER_API_KEY`. Credentials come from the SDK’s ambient credentials from `chalk login`, or from `CHALK_API_SERVER`,
-`CHALK_CLIENT_ID`, `CHALK_CLIENT_SECRET` and `CHALK_ENVIRONMENT_ID`.
+`CHALK_ROUTER_API_KEY`. Credentials come from your existing `chalk login`.
 
 ```bash
 export AUTO_EVALS_TOKEN=$(openssl rand -hex 24)   # shared by the receiver and the evaluator

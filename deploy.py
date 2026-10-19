@@ -24,27 +24,12 @@ HERE = Path(__file__).resolve().parent
 APP_FILES = ["agent.py", "traffic.py", "server.py", "index.html"]
 
 
-def configure_chalk() -> None:
-    """Resolve deployment routing settings using the SDK's ambient login."""
-    from chalkcompute import ConnectClient
-
-    client = ConnectClient()
-    try:
-        client._ensure_auth()
-        # Only routing settings are needed by the deployed app; credentials stay in the SDK.
-        os.environ["CHALK_API_SERVER"] = client._api_server
-        os.environ["CHALK_ENVIRONMENT_ID"] = client._env_id
-    finally:
-        client.close()
-
-
 def main() -> None:
     if not os.environ.get("AUTO_EVALS_TOKEN"):
         raise SystemExit(
             "set AUTO_EVALS_TOKEN (e.g. openssl rand -hex 24); evaluator.py needs the same value"
         )
 
-    configure_chalk()
     from chalkcompute import Image, ReadinessProbe, ScalingGroup, Secret
 
     image = Image.debian_slim(python_version="3.12").pip_install(
@@ -62,8 +47,6 @@ def main() -> None:
         cpu="1",
         memory="2Gi",
         env={
-            "CHALK_API_SERVER": os.environ["CHALK_API_SERVER"],
-            "CHALK_ENVIRONMENT_ID": os.environ["CHALK_ENVIRONMENT_ID"],
             "AGENT_MODEL": 'anthropic/claude-haiku-5-5',
             "PORT": "8080",
             "ROUTER_API_KEY": Secret.from_chalk_env('CHALK_ROUTER_API_KEY'),
