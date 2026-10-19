@@ -6,7 +6,7 @@
 # ///
 """Automatic evaluations for the Juniper support assistant, deployed as Chalk functions.
 
-    ./evaluator.py --demo-url https://<scaling-group-url> [--env-id <environment>] [--run-now]
+    ./evaluator.py
 
 Deploys four functions:
 
@@ -25,10 +25,8 @@ Thresholds (alert when the window's value drops below):
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 
@@ -39,28 +37,12 @@ from pydantic import BaseModel, Field
 HERE = Path(__file__).resolve().parent
 
 
-def load_chalk_env(env_id: str | None) -> None:
-    if "CHALK_CLIENT_ID" not in os.environ:
-        cfg = json.loads(subprocess.check_output(["chalk", "config", "--json"]))
-        os.environ["CHALK_API_SERVER"] = cfg["apiServer"]["value"]
-        os.environ["CHALK_CLIENT_ID"] = cfg["clientId"]["value"]
-        os.environ["CHALK_CLIENT_SECRET"] = cfg["clientSecret"]["value"]
-        os.environ.setdefault("CHALK_ENVIRONMENT_ID", cfg["environment"]["value"])
-    if env_id:
-        os.environ["CHALK_ENVIRONMENT_ID"] = env_id
-
-
-# The decorators below deploy at import time and read the environment then, so the
-# credentials, target environment and demo URL are loaded first. In a function pod this
-# module is imported as user_module and the pod's own environment applies.
+# The decorators capture the demo URL at import time. Look up the fixed service in
+# the current environment first. Function pods use their own injected environment.
 if __name__ == "__main__":
-    _early = argparse.ArgumentParser(add_help=False)
-    _early.add_argument("--env-id", default=None)
-    _early.add_argument("--demo-url", default=None)
-    _known = _early.parse_known_args()[0]
-    load_chalk_env(_known.env_id)
-    if _known.demo_url:
-        os.environ["AUTO_EVALS_DEMO_URL"] = _known.demo_url.rstrip("/")
+    from chalkcompute import ScalingGroup
+
+    os.environ["AUTO_EVALS_DEMO_URL"] = ScalingGroup.from_name("auto-evals").web_url.rstrip("/")
 
 JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "anthropic/claude-sonnet-5-5")
 DEMO_URL = os.environ.get("AUTO_EVALS_DEMO_URL", "")
@@ -371,18 +353,9 @@ def auto_eval() -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--env-id", default=None)
-    parser.add_argument("--demo-url", required=True)
-    parser.add_argument(
-        "--run-now", action="store_true", help="invoke one window immediately"
-    )
-    args = parser.parse_args()
     for function in (logged_answer, policy_compliance, judge, auto_eval):
         function.wait_ready(timeout=900)
         print("ready:", function, flush=True)
-    if args.run_now:
-        auto_eval.remote()
     return 0
 
 

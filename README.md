@@ -36,13 +36,12 @@ shoppers ──▶ Juniper (scaling group) ──▶ traffic log
 
 You need [`uv`](https://docs.astral.sh/uv/) and a Chalk environment with the model gateway
 enabled. Create a gateway key with `chalk router api-key create` and save it as the secret
-`CHALK_ROUTER_API_KEY`. Credentials come from `chalk config`, or from `CHALK_API_SERVER`,
-`CHALK_CLIENT_ID`, `CHALK_CLIENT_SECRET` and `CHALK_ENVIRONMENT_ID`.
+`CHALK_ROUTER_API_KEY`. Credentials come from your existing `chalk login`.
 
 ```bash
 export AUTO_EVALS_TOKEN=$(openssl rand -hex 24)   # shared by the receiver and the evaluator
-./deploy.py                                       # prints the web_url
-./evaluator.py --demo-url https://<web_url>
+./deploy.py # prints the web_url
+./evaluator.py
 ```
 
 The evaluator runs on a `*/5 * * * *` cron. Open the `web_url`, ask Juniper something, and press
@@ -85,3 +84,10 @@ the same.
 ## License
 
 Apache-2.0.
+
+## Local authentication
+
+The SDK reads credentials, API host, and the selected environment from your existing
+`chalk login` in `~/.chalk.yml`, including project-scoped and default logins.
+For unattended runs, `CHALK_CLIENT_ID` and `CHALK_CLIENT_SECRET` remain supported.
+The examples use the current environment selected by your Chalk login.
